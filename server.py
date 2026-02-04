@@ -4,8 +4,10 @@ import os
 
 app = Flask(__name__, static_folder='.')
 
-# Configure Gemini API
-API_KEY = 'AIzaSyA1fMQ8VBfOqh8iB05j9AKENhPO_4rj7XY'
+# Configure Gemini API from environment variable (set in Vercel dashboard)
+API_KEY = os.environ.get('GEMINI_API_KEY')
+if not API_KEY:
+    raise ValueError("GEMINI_API_KEY environment variable is not set")
 genai.configure(api_key=API_KEY)
 
 # Try different models in order of preference
