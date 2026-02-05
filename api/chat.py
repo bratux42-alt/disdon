@@ -59,8 +59,8 @@ class handler(BaseHTTPRequestHandler):
             return
         
         def call_gemini(target_model_name):
-            # Ensure model name starts with 'models/' if not already
-            full_model_name = target_model_name if target_model_name.startswith('models/') else f"models/{target_model_name}"
+            # The SDK handles these names well, but we can be explicit
+            # Many 404s come from '-latest' suffix or improper paths
             
             # Convert history to Gemini format
             gemini_history = []
@@ -72,35 +72,41 @@ class handler(BaseHTTPRequestHandler):
                 })
             
             model = genai.GenerativeModel(
-                model_name=full_model_name,
+                model_name=target_model_name,
                 system_instruction=system_instruction if system_instruction else None
             )
             chat = model.start_chat(history=gemini_history)
             return chat.send_message(user_message)
 
+        # Fallback sequence
+        fallbacks = [model_name, "gemini-1.5-flash", "gemini-2.0-flash"]
+        # Remove duplicates
         try:
-            try:
-                # Try the selected model
-                response = call_gemini(model_name)
-            except Exception as e:
-                error_msg = str(e)
-                # If 404 (Not Found) or 429 (Quota), try 1.5-flash-latest
-                if ("404" in error_msg or "429" in error_msg or "quota" in error_msg.lower()) and "1.5-flash" not in model_name:
-                    print(f"Error {error_msg} with {model_name}, trying fallback gemini-1.5-flash-latest")
-                    response = call_gemini("gemini-1.5-flash-latest")
-                else:
-                    # Final attempt with standard 1.5-flash if everything else fails
-                    if "1.5-flash" in model_name:
-                         # If even 1.5-flash is failing, we might have a serious issue
-                         raise e
-                    print(f"Last resort fallback to gemini-1.5-flash")
-                    response = call_gemini("gemini-1.5-flash")
+            # We use a set to keep order but remove duplicates
+            seen = set()
+            unique_fallbacks = [x for x in fallbacks if not (x in seen or seen.add(x))]
             
-            self.send_json(200, {'response': response.text})
+            last_error = None
+            for attempt_model in unique_fallbacks:
+                try:
+                    response = call_gemini(attempt_model)
+                    self.send_json(200, {'response': response.text})
+                    return
+                except Exception as e:
+                    last_error = e
+                    error_msg = str(e)
+                    # If it's a 404 or 429, continue to next model
+                    if "404" in error_msg or "429" in error_msg or "quota" in error_msg.lower():
+                        continue
+                    else:
+                        # For other errors (like invalid prompt), stop and report
+                        break
+            
+            # If we're here, all attempts failed
+            raise last_error
             
         except Exception as e:
-            # Provide more helpful guidance for common errors
             final_error = str(e)
-            if "API_KEY_INVALID" in final_error or "API key not found" in final_error:
-                final_error = "Invalid Gemini API Key. Please check your Vercel environment variables."
+            if "API_KEY_INVALID" in final_error:
+                final_error = "Invalid API Key. Check your settings."
             self.send_json(500, {'error': f"Gemini Error: {final_error}"})
