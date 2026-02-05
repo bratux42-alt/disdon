@@ -38,8 +38,8 @@ class handler(BaseHTTPRequestHandler):
             return
         
         try:
-            # Use gemini-2.0-flash (confirmed available on this key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            # Try gemini-2.0-flash first, fallback to flash-lite if quota exceeded
+            models_to_try = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash']
             
             # Convert history to Gemini format
             gemini_history = []
@@ -50,11 +50,22 @@ class handler(BaseHTTPRequestHandler):
                     'parts': [msg.get('content', '')]
                 })
             
-            # Create chat and send message
-            chat = model.start_chat(history=gemini_history)
-            response = chat.send_message(user_message)
+            last_error = None
+            for model_name in models_to_try:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    chat = model.start_chat(history=gemini_history)
+                    response = chat.send_message(user_message)
+                    self.send_json(200, {'response': response.text})
+                    return
+                except Exception as e:
+                    last_error = e
+                    if "429" in str(e) or "quota" in str(e).lower():
+                        continue  # Try next model
+                    else:
+                        break  # Other error, stop trying
             
-            self.send_json(200, {'response': response.text})
+            raise last_error
             
         except Exception as e:
             self.send_json(500, {'error': str(e)})
