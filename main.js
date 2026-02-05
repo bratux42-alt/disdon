@@ -10,6 +10,11 @@ const sidebar = document.getElementById('sidebar');
 const chatsList = document.getElementById('chats-list');
 const newChatBtn = document.getElementById('new-chat-btn');
 const sidebarToggle = document.getElementById('sidebar-toggle');
+const settingsModal = document.getElementById('settings-modal');
+const openSettingsBtn = document.getElementById('open-settings-btn');
+const saveSettingsBtn = document.getElementById('save-settings-btn');
+const modelSelect = document.getElementById('model-select');
+const systemInstructionInput = document.getElementById('system-instruction');
 
 // ============== Init ==============
 function init() {
@@ -43,6 +48,13 @@ function setupEventListeners() {
     newChatBtn.addEventListener('click', createNewChat);
     sidebarToggle?.addEventListener('click', () => {
         sidebar.classList.toggle('open');
+    });
+
+    // Settings
+    openSettingsBtn.addEventListener('click', openSettings);
+    saveSettingsBtn.addEventListener('click', saveSettings);
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) settingsModal.style.display = 'none';
     });
 }
 
@@ -82,7 +94,9 @@ function createNewChat() {
     const chat = {
         id: 'chat_' + Date.now(),
         title: 'Новый чат',
-        messages: []
+        messages: [],
+        model: 'gemini-2.0-flash',
+        systemInstruction: ''
     };
     chats.unshift(chat);
     saveChats();
@@ -115,9 +129,33 @@ function selectChat(chatId) {
 
     sidebar.classList.remove('open');
 
-    // Render messages
+    // Update settings in modal to match current chat
     const chat = chats.find(c => c.id === chatId);
+    if (chat) {
+        modelSelect.value = chat.model || 'gemini-2.0-flash';
+        systemInstructionInput.value = chat.systemInstruction || '';
+    }
+
+    // Render messages
     renderMessages(chat);
+}
+
+function openSettings() {
+    settingsModal.style.display = 'flex';
+}
+
+function saveSettings() {
+    const chat = chats.find(c => c.id === currentChatId);
+    if (chat) {
+        chat.model = modelSelect.value;
+        chat.systemInstruction = systemInstructionInput.value;
+        saveChats();
+        settingsModal.style.display = 'none';
+
+        // Add visual feedback
+        const sysMsg = chat.systemInstruction ? ` (Промпт: ${chat.systemInstruction})` : '';
+        addMessageToUI(`Настройки сохранены: ${chat.model}${sysMsg}`, 'system');
+    }
 }
 
 function renderMessages(chat) {
@@ -172,7 +210,9 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
-                history: history.slice(0, -1) // Exclude current message, already included
+                history: history.slice(0, -1),
+                model: chat.model,
+                system_instruction: chat.systemInstruction
             })
         });
 

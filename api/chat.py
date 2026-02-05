@@ -50,35 +50,37 @@ class handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(content_length).decode())
         user_message = body.get('message', '')
         history = body.get('history', [])
+        model_name = body.get('model', 'gemini-1.5-flash')
+        system_instruction = body.get('system_instruction', '')
         
         if not user_message:
             self.send_json(400, {'error': 'No message provided'})
             return
         
         try:
-            model = get_working_model()
-            if model is None:
-                self.send_json(500, {'error': 'No available Gemini models'})
-                return
+            # Initialize model with name and system instruction
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_name,
+                    system_instruction=system_instruction if system_instruction else None
+                )
+            except Exception as e:
+                # Fallback to default if selected model fails
+                print(f"Error initializing model {model_name}: {e}")
+                model = genai.GenerativeModel('gemini-1.5-flash')
             
             # Convert history to Gemini format
             gemini_history = []
             for msg in history:
-                role = msg.get('role', 'user')
-                # Gemini uses 'user' and 'model' roles
-                if role == 'assistant':
-                    role = 'model'
+                role = 'user' if msg.get('role') == 'user' else 'model'
                 gemini_history.append({
                     'role': role,
                     'parts': [msg.get('content', '')]
                 })
             
-            # Create chat with history for context
-            if gemini_history:
-                chat = model.start_chat(history=gemini_history)
-                response = chat.send_message(user_message)
-            else:
-                response = model.generate_content(user_message)
+            # Create chat and send message
+            chat = model.start_chat(history=gemini_history)
+            response = chat.send_message(user_message)
             
             self.send_json(200, {'response': response.text})
             

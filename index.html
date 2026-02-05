@@ -14,6 +14,28 @@
 <body>
     <div class="bg-nebula"></div>
 
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content glass-panel">
+            <h2>Настройки чата</h2>
+            <div class="settings-group">
+                <label for="model-select">Модель:</label>
+                <select id="model-select" class="glass-select">
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Быстрая)</option>
+                    <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite (Экономная)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                </select>
+            </div>
+            <div class="settings-group">
+                <label for="system-instruction">Системная инструкция:</label>
+                <textarea id="system-instruction" placeholder="Например: 'Отвечай кратко и по делу'..." rows="3"
+                    class="glass-textarea"></textarea>
+            </div>
+            <button id="save-settings-btn" class="btn-primary">Сохранить</button>
+        </div>
+    </div>
+
     <div class="layout-container">
         <!-- Sidebar -->
         <aside id="sidebar" class="sidebar glass-panel">
@@ -41,8 +63,18 @@
                         </svg>
                     </button>
                     <h1>GEMINI <span>AI ASSISTANT</span></h1>
-                    <div class="status-indicator">
-                        <span class="pulse"></span> Online
+                    <div class="header-actions">
+                        <button id="open-settings-btn" class="btn-icon" title="Настройки">
+                            <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2" />
+                                <path
+                                    d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33 1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82 1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+                                    stroke="currentColor" stroke-width="2" />
+                            </svg>
+                        </button>
+                        <div class="status-indicator">
+                            <span class="pulse"></span> Online
+                        </div>
                     </div>
                 </div>
             </header>
