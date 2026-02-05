@@ -58,6 +58,9 @@ class handler(BaseHTTPRequestHandler):
             return
         
         def call_gemini(target_model_name):
+            # Ensure model name starts with 'models/' if not already
+            full_model_name = target_model_name if target_model_name.startswith('models/') else f"models/{target_model_name}"
+            
             # Convert history to Gemini format
             gemini_history = []
             for msg in history:
@@ -68,7 +71,7 @@ class handler(BaseHTTPRequestHandler):
                 })
             
             model = genai.GenerativeModel(
-                model_name=target_model_name,
+                model_name=full_model_name,
                 system_instruction=system_instruction if system_instruction else None
             )
             chat = model.start_chat(history=gemini_history)
@@ -76,17 +79,23 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             try:
+                # Try the selected model
                 response = call_gemini(model_name)
             except Exception as e:
-                # If quota exceeded (429) and we're not already using 1.5-flash, try fallback
                 error_msg = str(e)
-                if ("429" in error_msg or "quota" in error_msg.lower()) and model_name != "gemini-1.5-flash":
-                    print(f"Quota exceeded for {model_name}, trying fallback gemini-1.5-flash")
-                    response = call_gemini("gemini-1.5-flash")
+                # If 404 (Not Found) or 429 (Quota), try 1.5-flash-latest
+                if ("404" in error_msg or "429" in error_msg or "quota" in error_msg.lower()) and "1.5-flash" not in model_name:
+                    print(f"Error {error_msg} with {model_name}, trying fallback gemini-1.5-flash-latest")
+                    response = call_gemini("gemini-1.5-flash-latest")
                 else:
-                    raise e
+                    # Final attempt with standard 1.5-flash if everything else fails
+                    if "1.5-flash" in model_name:
+                         # If even 1.5-flash is failing, we might have a serious issue
+                         raise e
+                    print(f"Last resort fallback to gemini-1.5-flash")
+                    response = call_gemini("gemini-1.5-flash")
             
             self.send_json(200, {'response': response.text})
             
         except Exception as e:
-            self.send_json(500, {'error': str(e)})
+            self.send_json(500, {'error': f"Gemini Error: {str(e)}"})
