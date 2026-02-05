@@ -4,16 +4,11 @@ import json
 import os
 import google.generativeai as genai
 
-# Configure Gemini API
-API_KEY = os.environ.get('GEMINI_API_KEY')
-if API_KEY:
-    genai.configure(api_key=API_KEY)
-
+# Models to try (fallback list)
 MODELS_TO_TRY = [
     'gemini-2.0-flash',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-flash-latest',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
 ]
 
 def get_working_model():
@@ -41,9 +36,15 @@ class handler(BaseHTTPRequestHandler):
         self.send_json(200, {})
     
     def do_POST(self):
-        if not API_KEY:
-            self.send_json(500, {'error': 'GEMINI_API_KEY not configured'})
+        # Read API Key inside handler for reliability in Vercel
+        api_key = os.environ.get('GEMINI_API_KEY')
+        
+        if not api_key:
+            self.send_json(500, {'error': 'GEMINI_API_KEY environment variable is not set in Vercel'})
             return
+        
+        # Configure for this specific request
+        genai.configure(api_key=api_key)
         
         # Read request
         content_length = int(self.headers.get('Content-Length', 0))
@@ -98,4 +99,8 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(200, {'response': response.text})
             
         except Exception as e:
-            self.send_json(500, {'error': f"Gemini Error: {str(e)}"})
+            # Provide more helpful guidance for common errors
+            final_error = str(e)
+            if "API_KEY_INVALID" in final_error or "API key not found" in final_error:
+                final_error = "Invalid Gemini API Key. Please check your Vercel environment variables."
+            self.send_json(500, {'error': f"Gemini Error: {final_error}"})
