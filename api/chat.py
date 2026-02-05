@@ -57,18 +57,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(400, {'error': 'No message provided'})
             return
         
-        try:
-            # Initialize model with name and system instruction
-            try:
-                model = genai.GenerativeModel(
-                    model_name=model_name,
-                    system_instruction=system_instruction if system_instruction else None
-                )
-            except Exception as e:
-                # Fallback to default if selected model fails
-                print(f"Error initializing model {model_name}: {e}")
-                model = genai.GenerativeModel('gemini-1.5-flash')
-            
+        def call_gemini(target_model_name):
             # Convert history to Gemini format
             gemini_history = []
             for msg in history:
@@ -78,9 +67,24 @@ class handler(BaseHTTPRequestHandler):
                     'parts': [msg.get('content', '')]
                 })
             
-            # Create chat and send message
+            model = genai.GenerativeModel(
+                model_name=target_model_name,
+                system_instruction=system_instruction if system_instruction else None
+            )
             chat = model.start_chat(history=gemini_history)
-            response = chat.send_message(user_message)
+            return chat.send_message(user_message)
+
+        try:
+            try:
+                response = call_gemini(model_name)
+            except Exception as e:
+                # If quota exceeded (429) and we're not already using 1.5-flash, try fallback
+                error_msg = str(e)
+                if ("429" in error_msg or "quota" in error_msg.lower()) and model_name != "gemini-1.5-flash":
+                    print(f"Quota exceeded for {model_name}, trying fallback gemini-1.5-flash")
+                    response = call_gemini("gemini-1.5-flash")
+                else:
+                    raise e
             
             self.send_json(200, {'response': response.text})
             
