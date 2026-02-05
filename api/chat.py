@@ -38,8 +38,8 @@ class handler(BaseHTTPRequestHandler):
             return
         
         try:
-            # Use gemini-1.5-flash as it's the most stable
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Use gemini-pro as it's the most universally available
+            model = genai.GenerativeModel('gemini-pro')
             
             # Convert history to Gemini format
             gemini_history = []
