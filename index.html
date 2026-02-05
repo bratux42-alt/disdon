@@ -13,55 +13,31 @@
 
 <body>
     <div class="bg-nebula"></div>
-    
-    <!-- Auth Modal -->
-    <div id="auth-modal" class="modal">
-        <div class="modal-content glass-panel">
-            <h2 id="auth-title">Вход</h2>
-            <form id="auth-form">
-                <input type="email" id="auth-email" placeholder="Email" required>
-                <input type="password" id="auth-password" placeholder="Пароль" required>
-                <button type="submit" class="btn-primary" id="auth-submit">Войти</button>
-            </form>
-            <p class="auth-switch">
-                <span id="auth-switch-text">Нет аккаунта?</span>
-                <a href="#" id="auth-switch-link">Регистрация</a>
-            </p>
-            <p id="auth-error" class="error-message"></p>
-        </div>
-    </div>
-    
+
     <div class="layout-container">
         <!-- Sidebar -->
         <aside id="sidebar" class="sidebar glass-panel">
             <div class="sidebar-header">
                 <button id="new-chat-btn" class="btn-icon" title="Новый чат">
                     <svg viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                     </svg>
                 </button>
                 <span class="sidebar-title">Чаты</span>
-                <button id="logout-btn" class="btn-icon" title="Выйти">
-                    <svg viewBox="0 0 24 24" fill="none">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
             </div>
             <div id="chats-list" class="chats-list">
                 <!-- Chats will be populated here -->
             </div>
-            <div class="sidebar-footer">
-                <span id="user-email" class="user-email"></span>
-            </div>
         </aside>
-        
+
         <!-- Main App -->
         <div class="app-container">
             <header>
                 <div class="glass-header">
                     <button id="sidebar-toggle" class="btn-icon mobile-only">
                         <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" />
                         </svg>
                     </button>
                     <h1>GEMINI <span>AI ASSISTANT</span></h1>

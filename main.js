@@ -1,59 +1,33 @@
 // ============== State ==============
-let currentUser = null;
-let currentChatId = null;
-let accessToken = null;
-let refreshToken = null;
-let chats = [];
+let chats = JSON.parse(localStorage.getItem('gemini_chats') || '[]');
+let currentChatId = localStorage.getItem('gemini_current_chat') || null;
 
 // ============== DOM Elements ==============
 const chatHistory = document.getElementById('chat-history');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
-const authModal = document.getElementById('auth-modal');
-const authForm = document.getElementById('auth-form');
-const authTitle = document.getElementById('auth-title');
-const authSubmit = document.getElementById('auth-submit');
-const authSwitchText = document.getElementById('auth-switch-text');
-const authSwitchLink = document.getElementById('auth-switch-link');
-const authError = document.getElementById('auth-error');
-const authEmail = document.getElementById('auth-email');
-const authPassword = document.getElementById('auth-password');
 const sidebar = document.getElementById('sidebar');
 const chatsList = document.getElementById('chats-list');
 const newChatBtn = document.getElementById('new-chat-btn');
-const logoutBtn = document.getElementById('logout-btn');
-const userEmailSpan = document.getElementById('user-email');
 const sidebarToggle = document.getElementById('sidebar-toggle');
-
-let isSignUp = false;
 
 // ============== Init ==============
 function init() {
-    // Load saved session
-    const savedToken = localStorage.getItem('access_token');
-    const savedRefresh = localStorage.getItem('refresh_token');
-    const savedUser = localStorage.getItem('user');
-
-    if (savedToken && savedUser) {
-        accessToken = savedToken;
-        refreshToken = savedRefresh;
-        currentUser = JSON.parse(savedUser);
-        showApp();
-        loadChats();
+    if (chats.length === 0) {
+        createNewChat();
     } else {
-        showAuthModal();
+        renderChatsList();
+        if (currentChatId && chats.find(c => c.id === currentChatId)) {
+            selectChat(currentChatId);
+        } else {
+            selectChat(chats[0].id);
+        }
     }
 
     setupEventListeners();
 }
 
 function setupEventListeners() {
-    // Auth
-    authForm.addEventListener('submit', handleAuth);
-    authSwitchLink.addEventListener('click', toggleAuthMode);
-    logoutBtn.addEventListener('click', logout);
-
-    // Chat
     sendBtn.addEventListener('click', sendMessage);
     userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -66,127 +40,18 @@ function setupEventListeners() {
         userInput.style.height = userInput.scrollHeight + 'px';
     });
 
-    // Sidebar
     newChatBtn.addEventListener('click', createNewChat);
     sidebarToggle?.addEventListener('click', () => {
         sidebar.classList.toggle('open');
     });
 }
 
-// ============== Auth ==============
-function showAuthModal() {
-    authModal.style.display = 'flex';
-    sidebar.style.display = 'none';
-}
-
-function hideAuthModal() {
-    authModal.style.display = 'none';
-}
-
-function showApp() {
-    hideAuthModal();
-    sidebar.style.display = 'flex';
-    userEmailSpan.textContent = currentUser?.email || '';
-}
-
-function toggleAuthMode(e) {
-    e.preventDefault();
-    isSignUp = !isSignUp;
-    authTitle.textContent = isSignUp ? 'Регистрация' : 'Вход';
-    authSubmit.textContent = isSignUp ? 'Зарегистрироваться' : 'Войти';
-    authSwitchText.textContent = isSignUp ? 'Уже есть аккаунт?' : 'Нет аккаунта?';
-    authSwitchLink.textContent = isSignUp ? 'Войти' : 'Регистрация';
-    authError.textContent = '';
-}
-
-async function handleAuth(e) {
-    e.preventDefault();
-    authError.textContent = '';
-    authSubmit.disabled = true;
-
-    const email = authEmail.value.trim();
-    const password = authPassword.value;
-
-    try {
-        const res = await fetch('/api/auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: isSignUp ? 'signup' : 'signin',
-                email,
-                password
-            })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            throw new Error(data.error || 'Ошибка аутентификации');
-        }
-
-        if (data.session?.access_token) {
-            accessToken = data.session.access_token;
-            refreshToken = data.session.refresh_token;
-            currentUser = data.user;
-
-            localStorage.setItem('access_token', accessToken);
-            localStorage.setItem('refresh_token', refreshToken);
-            localStorage.setItem('user', JSON.stringify(currentUser));
-
-            showApp();
-            loadChats();
-        } else if (data.message) {
-            authError.textContent = data.message;
-            authError.style.color = '#00ff88';
-        }
-    } catch (err) {
-        authError.textContent = err.message;
-        authError.style.color = '#ff4444';
-    } finally {
-        authSubmit.disabled = false;
-    }
-}
-
-function logout() {
-    accessToken = null;
-    refreshToken = null;
-    currentUser = null;
-    currentChatId = null;
-    chats = [];
-
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-
-    chatsList.innerHTML = '';
-    clearChatHistory();
-    showAuthModal();
+function saveChats() {
+    localStorage.setItem('gemini_chats', JSON.stringify(chats));
+    localStorage.setItem('gemini_current_chat', currentChatId);
 }
 
 // ============== Chats ==============
-async function loadChats() {
-    try {
-        const res = await fetch('/api/chats', {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        const data = await res.json();
-
-        if (res.ok && data.chats) {
-            chats = data.chats;
-            renderChatsList();
-
-            // Select first chat or create one
-            if (chats.length > 0) {
-                selectChat(chats[0].id);
-            } else {
-                createNewChat();
-            }
-        }
-    } catch (err) {
-        console.error('Error loading chats:', err);
-    }
-}
-
 function renderChatsList() {
     chatsList.innerHTML = '';
     chats.forEach(chat => {
@@ -213,103 +78,101 @@ function renderChatsList() {
     });
 }
 
-async function createNewChat() {
-    try {
-        const res = await fetch('/api/chats', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
-            },
-            body: JSON.stringify({ title: 'Новый чат' })
-        });
-
-        const data = await res.json();
-        if (res.ok && data.chat) {
-            chats.unshift(data.chat);
-            renderChatsList();
-            selectChat(data.chat.id);
-        }
-    } catch (err) {
-        console.error('Error creating chat:', err);
-    }
+function createNewChat() {
+    const chat = {
+        id: 'chat_' + Date.now(),
+        title: 'Новый чат',
+        messages: []
+    };
+    chats.unshift(chat);
+    saveChats();
+    renderChatsList();
+    selectChat(chat.id);
 }
 
-async function deleteChat(chatId) {
-    if (!confirm('Удалить этот чат?')) return;
+function deleteChat(chatId) {
+    if (chats.length === 1) {
+        alert('Нельзя удалить последний чат');
+        return;
+    }
 
-    try {
-        await fetch('/api/chats', {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
-            },
-            body: JSON.stringify({ chat_id: chatId })
-        });
+    chats = chats.filter(c => c.id !== chatId);
+    saveChats();
+    renderChatsList();
 
-        chats = chats.filter(c => c.id !== chatId);
-        renderChatsList();
-
-        if (currentChatId === chatId) {
-            if (chats.length > 0) {
-                selectChat(chats[0].id);
-            } else {
-                currentChatId = null;
-                clearChatHistory();
-            }
-        }
-    } catch (err) {
-        console.error('Error deleting chat:', err);
+    if (currentChatId === chatId) {
+        selectChat(chats[0].id);
     }
 }
 
 function selectChat(chatId) {
     currentChatId = chatId;
+    saveChats();
 
-    // Update UI
     document.querySelectorAll('.chat-item').forEach(item => {
         item.classList.toggle('active', item.dataset.id === chatId);
     });
 
-    // Close sidebar on mobile
     sidebar.classList.remove('open');
 
-    // Load messages (for now just clear)
-    clearChatHistory();
-    addMessage('Добро пожаловать. Я Gemini, ваш персональный ИИ помощник. Как я могу помочь вам сегодня?', 'system');
+    // Render messages
+    const chat = chats.find(c => c.id === chatId);
+    renderMessages(chat);
+}
+
+function renderMessages(chat) {
+    chatHistory.innerHTML = '';
+
+    // Welcome message
+    addMessageToUI('Добро пожаловать. Я Gemini, ваш персональный ИИ помощник. Как я могу помочь вам сегодня?', 'system');
+
+    // Chat messages
+    if (chat && chat.messages) {
+        chat.messages.forEach(msg => {
+            addMessageToUI(msg.content, msg.role === 'user' ? 'user' : 'ai');
+        });
+    }
 }
 
 // ============== Messages ==============
-function clearChatHistory() {
-    chatHistory.innerHTML = '';
-}
-
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
 
-    if (!currentChatId) {
-        alert('Выберите или создайте чат');
-        return;
-    }
-
     userInput.value = '';
     userInput.style.height = 'auto';
-    addMessage(text, 'user');
+
+    // Add user message
+    addMessageToUI(text, 'user');
+
+    // Save to chat
+    const chat = chats.find(c => c.id === currentChatId);
+    if (chat) {
+        chat.messages.push({ role: 'user', content: text });
+
+        // Update title if first message
+        if (chat.messages.length === 1) {
+            chat.title = text.substring(0, 40) + (text.length > 40 ? '...' : '');
+            renderChatsList();
+        }
+        saveChats();
+    }
 
     const loadingMessage = addLoadingIndicator();
 
     try {
+        // Send with history for context
+        const history = chat ? chat.messages.map(m => ({
+            role: m.role,
+            content: m.content
+        })) : [];
+
         const res = await fetch('/api/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
-                chat_id: currentChatId
+                history: history.slice(0, -1) // Exclude current message, already included
             })
         });
 
@@ -317,25 +180,23 @@ async function sendMessage() {
         chatHistory.removeChild(loadingMessage);
 
         if (data.response) {
-            addMessage(data.response, 'ai');
+            addMessageToUI(data.response, 'ai');
 
-            // Update chat title in sidebar if it was "Новый чат"
-            const chatIndex = chats.findIndex(c => c.id === currentChatId);
-            if (chatIndex !== -1 && chats[chatIndex].title === 'Новый чат') {
-                const newTitle = text.substring(0, 50) + (text.length > 50 ? '...' : '');
-                chats[chatIndex].title = newTitle;
-                renderChatsList();
+            // Save AI response
+            if (chat) {
+                chat.messages.push({ role: 'model', content: data.response });
+                saveChats();
             }
         } else if (data.error) {
-            addMessage(`Ошибка: ${data.error}`, 'ai');
+            addMessageToUI(`Ошибка: ${data.error}`, 'ai');
         }
     } catch (error) {
         if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
-        addMessage(`Ошибка сети: ${error.message}`, 'ai');
+        addMessageToUI(`Ошибка сети: ${error.message}`, 'ai');
     }
 }
 
-function addMessage(text, sender) {
+function addMessageToUI(text, sender) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}`;
 

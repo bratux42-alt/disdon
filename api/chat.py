@@ -1,9 +1,8 @@
-"""Chat API endpoint with context memory via Supabase."""
+"""Chat API endpoint with context memory via history parameter."""
 from http.server import BaseHTTPRequestHandler
 import json
 import os
 import google.generativeai as genai
-from supabase import create_client
 
 # Configure Gemini API
 API_KEY = os.environ.get('GEMINI_API_KEY')
@@ -28,41 +27,15 @@ def get_working_model():
             continue
     return None
 
-def get_supabase():
-    url = os.environ.get('SUPABASE_URL')
-    key = os.environ.get('SUPABASE_SERVICE_KEY')
-    if not url or not key:
-        return None
-    return create_client(url, key)
-
-def get_user_from_token(token: str):
-    """Verify token and get user ID."""
-    url = os.environ.get('SUPABASE_URL')
-    key = os.environ.get('SUPABASE_ANON_KEY')
-    if not url or not key:
-        return None
-    client = create_client(url, key)
-    try:
-        user = client.auth.get_user(token)
-        return user.user.id if user and user.user else None
-    except:
-        return None
-
 class handler(BaseHTTPRequestHandler):
     def send_json(self, status: int, data: dict):
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
-    
-    def get_auth_token(self):
-        auth = self.headers.get('Authorization', '')
-        if auth.startswith('Bearer '):
-            return auth[7:]
-        return None
     
     def do_OPTIONS(self):
         self.send_json(200, {})
@@ -72,34 +45,15 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(500, {'error': 'GEMINI_API_KEY not configured'})
             return
         
-        # Get auth token (optional for backward compatibility)
-        token = self.get_auth_token()
-        user_id = get_user_from_token(token) if token else None
-        
         # Read request
         content_length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(content_length).decode())
         user_message = body.get('message', '')
-        chat_id = body.get('chat_id')
+        history = body.get('history', [])
         
         if not user_message:
             self.send_json(400, {'error': 'No message provided'})
             return
-        
-        supabase = get_supabase()
-        history = []
-        
-        # Load chat history if authenticated and chat_id provided
-        if supabase and user_id and chat_id:
-            try:
-                # Verify chat ownership
-                chat = supabase.table('chats').select('id').eq('id', chat_id).eq('user_id', user_id).execute()
-                if chat.data:
-                    # Load message history
-                    messages = supabase.table('messages').select('role, content').eq('chat_id', chat_id).order('created_at').execute()
-                    history = [{'role': m['role'], 'parts': [m['content']]} for m in messages.data]
-            except Exception as e:
-                print(f"Error loading history: {e}")
         
         try:
             model = get_working_model()
@@ -107,49 +61,26 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(500, {'error': 'No available Gemini models'})
                 return
             
+            # Convert history to Gemini format
+            gemini_history = []
+            for msg in history:
+                role = msg.get('role', 'user')
+                # Gemini uses 'user' and 'model' roles
+                if role == 'assistant':
+                    role = 'model'
+                gemini_history.append({
+                    'role': role,
+                    'parts': [msg.get('content', '')]
+                })
+            
             # Create chat with history for context
-            if history:
-                chat = model.start_chat(history=history)
+            if gemini_history:
+                chat = model.start_chat(history=gemini_history)
                 response = chat.send_message(user_message)
             else:
                 response = model.generate_content(user_message)
             
-            ai_response = response.text
-            
-            # Save messages if authenticated
-            if supabase and user_id and chat_id:
-                try:
-                    # Save user message
-                    supabase.table('messages').insert({
-                        'chat_id': chat_id,
-                        'role': 'user',
-                        'content': user_message
-                    }).execute()
-                    
-                    # Save AI response
-                    supabase.table('messages').insert({
-                        'chat_id': chat_id,
-                        'role': 'model',
-                        'content': ai_response
-                    }).execute()
-                    
-                    # Update chat title if first message
-                    if len(history) == 0:
-                        # Generate short title from first message
-                        title = user_message[:50] + ('...' if len(user_message) > 50 else '')
-                        supabase.table('chats').update({
-                            'title': title,
-                            'updated_at': 'now()'
-                        }).eq('id', chat_id).execute()
-                    else:
-                        # Just update timestamp
-                        supabase.table('chats').update({
-                            'updated_at': 'now()'
-                        }).eq('id', chat_id).execute()
-                except Exception as e:
-                    print(f"Error saving messages: {e}")
-            
-            self.send_json(200, {'response': ai_response})
+            self.send_json(200, {'response': response.text})
             
         except Exception as e:
             self.send_json(500, {'error': str(e)})
