@@ -6,10 +6,6 @@
       "use": "@vercel/python"
     },
     {
-      "src": "api/models.py",
-      "use": "@vercel/python"
-    },
-    {
       "src": "*.html",
       "use": "@vercel/static"
     },
@@ -26,10 +22,6 @@
     {
       "src": "/api/chat",
       "dest": "/api/chat.py"
-    },
-    {
-      "src": "/api/models",
-      "dest": "/api/models.py"
     },
     {
       "src": "/(.*\\.css)",

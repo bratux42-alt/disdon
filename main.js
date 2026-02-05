@@ -10,11 +10,6 @@ const sidebar = document.getElementById('sidebar');
 const chatsList = document.getElementById('chats-list');
 const newChatBtn = document.getElementById('new-chat-btn');
 const sidebarToggle = document.getElementById('sidebar-toggle');
-const settingsModal = document.getElementById('settings-modal');
-const openSettingsBtn = document.getElementById('open-settings-btn');
-const saveSettingsBtn = document.getElementById('save-settings-btn');
-const modelSelect = document.getElementById('model-select');
-const systemInstructionInput = document.getElementById('system-instruction');
 
 // ============== Init ==============
 function init() {
@@ -49,13 +44,11 @@ function setupEventListeners() {
     sidebarToggle?.addEventListener('click', () => {
         sidebar.classList.toggle('open');
     });
+}
 
-    // Settings
-    openSettingsBtn.addEventListener('click', openSettings);
-    saveSettingsBtn.addEventListener('click', saveSettings);
-    settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) settingsModal.style.display = 'none';
-    });
+// ============== Chats Management ==============
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
 function saveChats() {
@@ -63,60 +56,61 @@ function saveChats() {
     localStorage.setItem('gemini_current_chat', currentChatId);
 }
 
-// ============== Chats ==============
+function createNewChat() {
+    const newChat = {
+        id: generateId(),
+        title: 'Новый чат',
+        messages: [],
+        createdAt: Date.now()
+    };
+
+    chats.unshift(newChat);
+    saveChats();
+    renderChatsList();
+    selectChat(newChat.id);
+}
+
+function deleteChat(chatId, event) {
+    event.stopPropagation();
+
+    chats = chats.filter(c => c.id !== chatId);
+
+    if (currentChatId === chatId) {
+        currentChatId = chats.length > 0 ? chats[0].id : null;
+    }
+
+    saveChats();
+    renderChatsList();
+
+    if (currentChatId) {
+        selectChat(currentChatId);
+    } else {
+        createNewChat();
+    }
+}
+
 function renderChatsList() {
     chatsList.innerHTML = '';
-    chats.forEach(chat => {
-        const item = document.createElement('div');
-        item.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
-        item.dataset.id = chat.id;
 
-        item.innerHTML = `
+    chats.forEach(chat => {
+        const chatItem = document.createElement('div');
+        chatItem.className = `chat-item ${chat.id === currentChatId ? 'active' : ''}`;
+        chatItem.dataset.id = chat.id;
+
+        chatItem.innerHTML = `
             <span class="chat-title">${escapeHtml(chat.title)}</span>
             <button class="delete-chat-btn" title="Удалить">
                 <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M6 6L18 18M6 18L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
             </button>
         `;
 
-        item.querySelector('.chat-title').addEventListener('click', () => selectChat(chat.id));
-        item.querySelector('.delete-chat-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteChat(chat.id);
-        });
+        chatItem.addEventListener('click', () => selectChat(chat.id));
+        chatItem.querySelector('.delete-chat-btn').addEventListener('click', (e) => deleteChat(chat.id, e));
 
-        chatsList.appendChild(item);
+        chatsList.appendChild(chatItem);
     });
-}
-
-function createNewChat() {
-    const chat = {
-        id: 'chat_' + Date.now(),
-        title: 'Новый чат',
-        messages: [],
-        model: 'gemini-2.0-flash',
-        systemInstruction: ''
-    };
-    chats.unshift(chat);
-    saveChats();
-    renderChatsList();
-    selectChat(chat.id);
-}
-
-function deleteChat(chatId) {
-    if (chats.length === 1) {
-        alert('Нельзя удалить последний чат');
-        return;
-    }
-
-    chats = chats.filter(c => c.id !== chatId);
-    saveChats();
-    renderChatsList();
-
-    if (currentChatId === chatId) {
-        selectChat(chats[0].id);
-    }
 }
 
 function selectChat(chatId) {
@@ -129,33 +123,9 @@ function selectChat(chatId) {
 
     sidebar.classList.remove('open');
 
-    // Update settings in modal to match current chat
-    const chat = chats.find(c => c.id === chatId);
-    if (chat) {
-        modelSelect.value = chat.model || 'gemini-2.0-flash';
-        systemInstructionInput.value = chat.systemInstruction || '';
-    }
-
     // Render messages
+    const chat = chats.find(c => c.id === chatId);
     renderMessages(chat);
-}
-
-function openSettings() {
-    settingsModal.style.display = 'flex';
-}
-
-function saveSettings() {
-    const chat = chats.find(c => c.id === currentChatId);
-    if (chat) {
-        chat.model = modelSelect.value;
-        chat.systemInstruction = systemInstructionInput.value;
-        saveChats();
-        settingsModal.style.display = 'none';
-
-        // Add visual feedback
-        const sysMsg = chat.systemInstruction ? ` (Промпт: ${chat.systemInstruction})` : '';
-        addMessageToUI(`Настройки сохранены: ${chat.model}${sysMsg}`, 'system');
-    }
 }
 
 function renderMessages(chat) {
@@ -210,9 +180,7 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
-                history: history.slice(0, -1),
-                model: chat.model,
-                system_instruction: chat.systemInstruction
+                history: history.slice(0, -1)
             })
         });
 
