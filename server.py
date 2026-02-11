@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_from_directory
 import google.generativeai as genai
 import os
 
@@ -49,7 +49,6 @@ def chat():
     
     data = request.json
     user_message = data.get('message', '')
-    history = data.get('history', [])
     
     if not user_message:
         return jsonify({'error': 'No message provided'}), 400
@@ -61,23 +60,10 @@ def chat():
             return jsonify({'error': 'No available Gemini models found for this API key'}), 500
     
     try:
-        # Convert history to Gemini format
-        gemini_history = []
-        for msg in history:
-            role = 'user' if msg['role'] == 'user' else 'model'
-            gemini_history.append({'role': role, 'parts': [msg['content']]})
-
-        # Start chat session with history
-        chat_session = model.start_chat(history=gemini_history)
-        
-        def generate():
-            response = chat_session.send_message(user_message, stream=True)
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-
-        return Response(stream_with_context(generate()), mimetype='text/plain')
-
+        response = model.generate_content(user_message)
+        return jsonify({
+            'response': response.text
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -94,7 +80,6 @@ def list_models():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print("DEBUG: Using NEW server code (streaming + context)")
     print("🚀 Starting Gemini AI Server...")
     print("📍 Open http://localhost:5000 in your browser")
-    app.run(debug=True, port=5000)
+    app = Flask(__name__)

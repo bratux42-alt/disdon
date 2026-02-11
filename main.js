@@ -10,15 +10,9 @@ const sidebar = document.getElementById('sidebar');
 const chatsList = document.getElementById('chats-list');
 const newChatBtn = document.getElementById('new-chat-btn');
 const sidebarToggle = document.getElementById('sidebar-toggle');
-const themeToggle = document.getElementById('theme-toggle');
-const themeMenu = document.getElementById('theme-menu');
 
 // ============== Init ==============
 function init() {
-    // Load theme
-    const savedTheme = localStorage.getItem('gemini_theme') || 'default';
-    applyTheme(savedTheme);
-
     if (chats.length === 0) {
         createNewChat();
     } else {
@@ -50,29 +44,6 @@ function setupEventListeners() {
     sidebarToggle?.addEventListener('click', () => {
         sidebar.classList.toggle('open');
     });
-
-    // Theme Selector
-    themeToggle?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        themeMenu.classList.toggle('hidden');
-    });
-
-    document.querySelectorAll('.theme-menu button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const theme = btn.dataset.theme;
-            applyTheme(theme);
-            themeMenu.classList.add('hidden');
-        });
-    });
-
-    document.addEventListener('click', () => {
-        themeMenu?.classList.add('hidden');
-    });
-}
-
-function applyTheme(theme) {
-    document.body.className = theme === 'default' ? '' : `theme-${theme}`;
-    localStorage.setItem('gemini_theme', theme);
 }
 
 // ============== Chats Management ==============
@@ -172,12 +143,6 @@ function renderMessages(chat) {
 }
 
 // ============== Messages ==============
-function formatMessage(text) {
-    return text
-        .replace(/\n/g, '<br>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-}
-
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
@@ -190,15 +155,7 @@ async function sendMessage() {
 
     // Save to chat
     const chat = chats.find(c => c.id === currentChatId);
-    let history = [];
-
     if (chat) {
-        // Prepare history for backend (before adding current message)
-        history = chat.messages.map(m => ({
-            role: m.role,
-            content: m.content
-        }));
-
         chat.messages.push({ role: 'user', content: text });
 
         // Update title if first message
@@ -212,80 +169,39 @@ async function sendMessage() {
     const loadingMessage = addLoadingIndicator();
 
     try {
+        // Send with history for context
+        const history = chat ? chat.messages.map(m => ({
+            role: m.role,
+            content: m.content
+        })) : [];
+
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
-                history: history
+                history: history.slice(0, -1)
             })
         });
 
-        const contentType = res.headers.get('Content-Type') || '';
-        const responseText = await res.text();
+        const data = await res.json();
+        chatHistory.removeChild(loadingMessage);
 
-        // Remove loading indicator
-        if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
+        if (data.response) {
+            addMessageToUI(data.response, 'ai');
 
-        if (!res.ok) {
-            // Error response (JSON)
-            try {
-                const errData = JSON.parse(responseText);
-                throw new Error(errData.error || res.statusText);
-            } catch (parseErr) {
-                throw new Error(responseText || res.statusText);
+            // Save AI response
+            if (chat) {
+                chat.messages.push({ role: 'model', content: data.response });
+                saveChats();
             }
+        } else if (data.error) {
+            addMessageToUI(`Ошибка: ${data.error}`, 'ai');
         }
-
-        // Parse response: plain text or legacy JSON
-        let aiFullResponse = '';
-        if (contentType.includes('application/json')) {
-            // Legacy JSON format fallback
-            const data = JSON.parse(responseText);
-            aiFullResponse = data.response || responseText;
-        } else {
-            // New plain text format
-            aiFullResponse = responseText;
-        }
-
-        // Create AI message bubble with typing animation
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message ai';
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble';
-        messageDiv.appendChild(bubble);
-        chatHistory.appendChild(messageDiv);
-
-        // Typing animation
-        await typeMessage(bubble, aiFullResponse);
-
-        // Save AI response
-        if (chat) {
-            chat.messages.push({ role: 'model', content: aiFullResponse });
-            saveChats();
-        }
-
     } catch (error) {
         if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
-        addMessageToUI(`Ошибка: ${error.message}`, 'ai');
+        addMessageToUI(`Ошибка сети: ${error.message}`, 'ai');
     }
-}
-
-async function typeMessage(bubble, fullText) {
-    const chars = [...fullText];
-    let displayed = '';
-    const chunkSize = 3; // characters per tick
-    const delay = 15; // ms between ticks
-
-    for (let i = 0; i < chars.length; i += chunkSize) {
-        displayed += chars.slice(i, i + chunkSize).join('');
-        bubble.innerHTML = formatMessage(displayed);
-        chatHistory.scrollTop = chatHistory.scrollHeight;
-        await new Promise(r => setTimeout(r, delay));
-    }
-    // Ensure full text is displayed
-    bubble.innerHTML = formatMessage(fullText);
-    chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
 function addMessageToUI(text, sender) {
@@ -295,7 +211,11 @@ function addMessageToUI(text, sender) {
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    bubble.innerHTML = formatMessage(text);
+    const formattedText = text
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    bubble.innerHTML = formattedText;
     messageDiv.appendChild(bubble);
     chatHistory.appendChild(messageDiv);
     chatHistory.scrollTop = chatHistory.scrollHeight;
