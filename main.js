@@ -10,9 +10,15 @@ const sidebar = document.getElementById('sidebar');
 const chatsList = document.getElementById('chats-list');
 const newChatBtn = document.getElementById('new-chat-btn');
 const sidebarToggle = document.getElementById('sidebar-toggle');
+const themeToggle = document.getElementById('theme-toggle');
+const themeMenu = document.getElementById('theme-menu');
 
 // ============== Init ==============
 function init() {
+    // Load theme
+    const savedTheme = localStorage.getItem('gemini_theme') || 'default';
+    applyTheme(savedTheme);
+
     if (chats.length === 0) {
         createNewChat();
     } else {
@@ -44,6 +50,29 @@ function setupEventListeners() {
     sidebarToggle?.addEventListener('click', () => {
         sidebar.classList.toggle('open');
     });
+
+    // Theme Selector
+    themeToggle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        themeMenu.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('.theme-menu button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const theme = btn.dataset.theme;
+            applyTheme(theme);
+            themeMenu.classList.add('hidden');
+        });
+    });
+
+    document.addEventListener('click', () => {
+        themeMenu?.classList.add('hidden');
+    });
+}
+
+function applyTheme(theme) {
+    document.body.className = theme === 'default' ? '' : `theme-${theme}`;
+    localStorage.setItem('gemini_theme', theme);
 }
 
 // ============== Chats Management ==============
@@ -143,6 +172,12 @@ function renderMessages(chat) {
 }
 
 // ============== Messages ==============
+function formatMessage(text) {
+    return text
+        .replace(/\n/g, '<br>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
@@ -155,7 +190,15 @@ async function sendMessage() {
 
     // Save to chat
     const chat = chats.find(c => c.id === currentChatId);
+    let history = [];
+
     if (chat) {
+        // Prepare history for backend (before adding current message)
+        history = chat.messages.map(m => ({
+            role: m.role,
+            content: m.content
+        }));
+
         chat.messages.push({ role: 'user', content: text });
 
         // Update title if first message
@@ -169,38 +212,55 @@ async function sendMessage() {
     const loadingMessage = addLoadingIndicator();
 
     try {
-        // Send with history for context
-        const history = chat ? chat.messages.map(m => ({
-            role: m.role,
-            content: m.content
-        })) : [];
-
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
-                history: history.slice(0, -1)
+                history: history
             })
         });
 
-        const data = await res.json();
-        chatHistory.removeChild(loadingMessage);
-
-        if (data.response) {
-            addMessageToUI(data.response, 'ai');
-
-            // Save AI response
-            if (chat) {
-                chat.messages.push({ role: 'model', content: data.response });
-                saveChats();
-            }
-        } else if (data.error) {
-            addMessageToUI(`Ошибка: ${data.error}`, 'ai');
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || res.statusText);
         }
+
+        // Remove loading indicator and create AI message bubble
+        if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        messageDiv.appendChild(bubble);
+        chatHistory.appendChild(messageDiv);
+
+        // Stream reading
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let aiFullResponse = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            aiFullResponse += chunk;
+
+            bubble.innerHTML = formatMessage(aiFullResponse);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Save AI response
+        if (chat) {
+            chat.messages.push({ role: 'model', content: aiFullResponse });
+            saveChats();
+        }
+
     } catch (error) {
         if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
-        addMessageToUI(`Ошибка сети: ${error.message}`, 'ai');
+        addMessageToUI(`Ошибка: ${error.message}`, 'ai');
     }
 }
 
@@ -211,11 +271,7 @@ function addMessageToUI(text, sender) {
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    const formattedText = text
-        .replace(/\n/g, '<br>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-    bubble.innerHTML = formattedText;
+    bubble.innerHTML = formatMessage(text);
     messageDiv.appendChild(bubble);
     chatHistory.appendChild(messageDiv);
     chatHistory.scrollTop = chatHistory.scrollHeight;

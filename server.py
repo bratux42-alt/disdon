@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 import google.generativeai as genai
 import os
 
@@ -49,6 +49,7 @@ def chat():
     
     data = request.json
     user_message = data.get('message', '')
+    history = data.get('history', [])
     
     if not user_message:
         return jsonify({'error': 'No message provided'}), 400
@@ -60,10 +61,23 @@ def chat():
             return jsonify({'error': 'No available Gemini models found for this API key'}), 500
     
     try:
-        response = model.generate_content(user_message)
-        return jsonify({
-            'response': response.text
-        })
+        # Convert history to Gemini format
+        gemini_history = []
+        for msg in history:
+            role = 'user' if msg['role'] == 'user' else 'model'
+            gemini_history.append({'role': role, 'parts': [msg['content']]})
+
+        # Start chat session with history
+        chat_session = model.start_chat(history=gemini_history)
+        
+        def generate():
+            response = chat_session.send_message(user_message, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+
+        return Response(stream_with_context(generate()), mimetype='text/plain')
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
