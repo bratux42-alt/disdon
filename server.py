@@ -94,6 +94,7 @@ def list_models():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    print("DEBUG: Using NEW server code (streaming + context)")
     print("🚀 Starting Gemini AI Server...")
     print("📍 Open http://localhost:5000 in your browser")
-    app = Flask(__name__)
+    app.run(debug=True, port=5000)
