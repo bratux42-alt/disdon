@@ -221,14 +221,34 @@ async function sendMessage() {
             })
         });
 
-        if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || res.statusText);
-        }
+        const contentType = res.headers.get('Content-Type') || '';
+        const responseText = await res.text();
 
-        // Remove loading indicator and create AI message bubble
+        // Remove loading indicator
         if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
 
+        if (!res.ok) {
+            // Error response (JSON)
+            try {
+                const errData = JSON.parse(responseText);
+                throw new Error(errData.error || res.statusText);
+            } catch (parseErr) {
+                throw new Error(responseText || res.statusText);
+            }
+        }
+
+        // Parse response: plain text or legacy JSON
+        let aiFullResponse = '';
+        if (contentType.includes('application/json')) {
+            // Legacy JSON format fallback
+            const data = JSON.parse(responseText);
+            aiFullResponse = data.response || responseText;
+        } else {
+            // New plain text format
+            aiFullResponse = responseText;
+        }
+
+        // Create AI message bubble with typing animation
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message ai';
         const bubble = document.createElement('div');
@@ -236,21 +256,8 @@ async function sendMessage() {
         messageDiv.appendChild(bubble);
         chatHistory.appendChild(messageDiv);
 
-        // Stream reading
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let aiFullResponse = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            aiFullResponse += chunk;
-
-            bubble.innerHTML = formatMessage(aiFullResponse);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
-        }
+        // Typing animation
+        await typeMessage(bubble, aiFullResponse);
 
         // Save AI response
         if (chat) {
@@ -262,6 +269,23 @@ async function sendMessage() {
         if (loadingMessage.parentNode) chatHistory.removeChild(loadingMessage);
         addMessageToUI(`Ошибка: ${error.message}`, 'ai');
     }
+}
+
+async function typeMessage(bubble, fullText) {
+    const chars = [...fullText];
+    let displayed = '';
+    const chunkSize = 3; // characters per tick
+    const delay = 15; // ms between ticks
+
+    for (let i = 0; i < chars.length; i += chunkSize) {
+        displayed += chars.slice(i, i + chunkSize).join('');
+        bubble.innerHTML = formatMessage(displayed);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        await new Promise(r => setTimeout(r, delay));
+    }
+    // Ensure full text is displayed
+    bubble.innerHTML = formatMessage(fullText);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
 function addMessageToUI(text, sender) {

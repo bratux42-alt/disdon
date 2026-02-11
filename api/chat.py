@@ -18,6 +18,15 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
+
+    def send_text(self, status: int, text: str):
+        self.send_response(status)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        self.wfile.write(text.encode('utf-8'))
     
     def do_OPTIONS(self):
         self.send_json(200, {})
@@ -56,7 +65,7 @@ class handler(BaseHTTPRequestHandler):
                     model = genai.GenerativeModel(model_name)
                     chat = model.start_chat(history=gemini_history)
                     response = chat.send_message(user_message)
-                    self.send_json(200, {'response': response.text})
+                    self.send_text(200, response.text)
                     return
                 except Exception as e:
                     last_error = e
